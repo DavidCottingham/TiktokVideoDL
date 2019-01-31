@@ -212,9 +212,9 @@ def main():
             videoURL = player_div.video.get("src")
             metadata["videoURL"] = videoURL
         except AttributeError:
-            #Lazy way of checking if user provided bad URL (or video deleted?)
+            #Lazy way of checking if user provided bad URL or video was deleted
                 #page will not have video to load (no src in video div) if no video
-            print("Video not found")
+            print("Video not found. Check your URL or video was removed")
             #continue to next provided URL if video not found
             continue
 
