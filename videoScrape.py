@@ -1,4 +1,5 @@
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from contextlib import closing
 import requests
@@ -192,8 +193,9 @@ def main():
             #page URL metadata
             pageURL = chrome.current_url.split("?")[0]
             metadata["pageURL"] = pageURL
-        except selenium.common.exceptions.WebDriverException:
+        except WebDriverException as e:
             print("Chrome error: WebDriverException")
+            #raise e
             return
         except Exception as e:
             raise e
@@ -249,6 +251,9 @@ def main():
             #only if video downloaded successfully write metadata to file
             writeMetadata(os.path.join(directory, CSV_FILENAME), CSV_HEADERS, metadata)
             #debugMetadataCheck(os.path.join(directory, CSV_FILENAME))
+
+    #Close Chrome properly
+    chrome.quit()
 
 if __name__ == "__main__":
     main()
