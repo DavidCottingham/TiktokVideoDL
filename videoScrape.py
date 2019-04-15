@@ -9,6 +9,9 @@ import datetime
 import os
 import csv
 
+#New URL type: https://www.tiktok.com/share/video/6642696300275961093
+    #Can convert all to these to get new info? (likes, comments, music URL, use URL)
+
 #Define CLI arguments using argparse
 def setUpArgs():
     parser = argparse.ArgumentParser()
@@ -51,8 +54,7 @@ def makeDir(dirName):
 #Download the video from the page to the directory
 def downloadVideo(url, userID, videoID, dirName):
     #Make video filename using user ID and video ID
-    #omit "@" on userID
-    fname = userID[1:] + " - " + videoID + ".mp4"
+    fname = userID + " - " + videoID + ".mp4"
     filePath = os.path.join(dirName, fname)
 
     #Check if a video with the same filename exists. Since we are using the
@@ -192,7 +194,21 @@ def main():
 
             #page URL metadata
             pageURL = chrome.current_url.split("?")[0]
-            metadata["pageURL"] = pageURL
+            #print(pageURL)
+            if "/share/video/" in pageURL:
+                #print("Share type")
+                pass
+            else:
+                #make share type
+                print("not share type")
+                tempID = pageURL.split("/")[-1].split(".")[0]
+                metadata["videoID"] = tempID
+                pageURL = "https://www.tiktok.com/share/video/" + tempID
+                chrome.get(pageURL)
+                #Waiting for javascript to load video
+                    #If don't wait, video URL will be empty
+                time.sleep(1)
+            #metadata["pageURL"] = pageURL
         except WebDriverException as e:
             print("Chrome error: WebDriverException")
             #raise e
@@ -205,14 +221,19 @@ def main():
         page = BeautifulSoup(chrome.page_source, "html.parser")
 
         #video ID metadata
-        player_div = page.find("div", id = "Video")
-        videoID = player_div.get("ga_label")
+        #player_div = page.find("div", id = "Video")
+        #videoID = player_div.get("ga_label")
+        #metadata["videoID"] = videoID
+
+        videoID = pageURL.split("/")[-1]
         metadata["videoID"] = videoID
 
         try:
             #video URL metadata
-            videoURL = player_div.video.get("src")
-            metadata["videoURL"] = videoURL
+            #videoURL = player_div.video.get("src")
+            videoURL = page.find("video").get("src")
+            #print(videoURL)
+            #metadata["videoURL"] = videoURL
         except AttributeError:
             #Lazy way of checking if user provided bad URL or video was deleted
                 #page will not have video to load (no src in video div) if no video
@@ -221,26 +242,37 @@ def main():
             continue
 
         #user name metadata
-        metadata_div = page.find("div", id = "metadata")
-        userName = metadata_div.contents[0].h1.text
+        #metadata_div = page.find("div", id = "metadata")
+        #userName = metadata_div.contents[0].h1.text
+        userName = page.find("div", class_ = "user-name").text[1:]
+        #print(userName)
         metadata["userName"] = userName
 
         #user ID metadata
-        userID = metadata_div.contents[1].p.text
+        #userID = metadata_div.contents[1].p.text
+        userID = page.find("div", class_ = "user-id").text
+        #print(userID)
         metadata["userID"] = userID
 
         #user profile URL metadata
-        userURL = metadata_div.contents[0].get("href")
-        metadata["userURL"] = userURL
+        #userURL = metadata_div.contents[0].get("href")
+        #metadata["userURL"] = userURL
 
         #sound metadata
-        ps = metadata_div.find_all("p")
-        sound = ps[1].text
+        #ps = metadata_div.find_all("p")
+        #sound = ps[1].text
+        sound = page.find("div", class_ = "music").text
         metadata["sound"] = sound
 
         #caption metadata
-        caption = page.find("p", id = "caption").text
+        #caption = page.find("p", id = "caption").text
+        caption = page.find("div", class_ = "desc").div.div.text
+        #print(caption)
         metadata["caption"] = caption
+
+        #counts metadata_div
+        counts = page.find("div", class_ = "count").text
+        #print(counts)
 
         #timestamp metadata
         timestamp = readable = datetime.datetime.fromtimestamp(time.time()).isoformat()
