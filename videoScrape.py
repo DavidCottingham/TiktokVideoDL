@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
@@ -244,34 +246,34 @@ def main():
         #user name metadata
         #metadata_div = page.find("div", id = "metadata")
         #userName = metadata_div.contents[0].h1.text
-        userName = page.find("div", class_ = "user-name").text[1:]
+        userName = page.find("p", class_ = "_video_card_big_user_info_nickname").text
         #print(userName)
         metadata["userName"] = userName
 
         #user ID metadata
         #userID = metadata_div.contents[1].p.text
-        userID = page.find("div", class_ = "user-id").text
+        userID = page.find("p", class_ = "_video_card_big_user_info_handle").text[1:]
         #print(userID)
         metadata["userID"] = userID
 
         #user profile URL metadata
-        #userURL = metadata_div.contents[0].get("href")
-        #metadata["userURL"] = userURL
+        userURL = page.find("a", class_ = "_video_card_big_user_info_").get("href")
+        metadata["userURL"] = userURL
 
         #sound metadata
         #ps = metadata_div.find_all("p")
         #sound = ps[1].text
-        sound = page.find("div", class_ = "music").text
+        sound = page.find("div", class_ = "_video_card_big_meta_info_music").a.text
         metadata["sound"] = sound
 
         #caption metadata
         #caption = page.find("p", id = "caption").text
-        caption = page.find("div", class_ = "desc").div.div.text
+        caption = page.find("h1", class_ = "_video_card_big_meta_info_title").span.text
         #print(caption)
         metadata["caption"] = caption
 
         #counts metadata_div
-        counts = page.find("div", class_ = "count").text
+        counts = page.find("div", class_ = "_video_card_big_meta_info_count").text
         #print(counts)
 
         #timestamp metadata
