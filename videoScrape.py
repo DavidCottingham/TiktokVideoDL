@@ -4,6 +4,7 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from contextlib import closing
+from enum import Enum
 import requests
 import argparse
 import time
@@ -13,6 +14,11 @@ import csv
 
 #New URL type: https://www.tiktok.com/share/video/6642696300275961093
     #Can convert all to these to get new info? (likes, comments, music URL, use URL)
+
+class LoggingLevel(Enum):
+    noLog = 0
+    moderate = 1
+    verbose = 2
 
 #Define CLI arguments using argparse
 def setUpArgs():
@@ -146,7 +152,17 @@ def debugMetadataCheck(filePath):
             for k, v in row.items():
                 print(k, v, sep=": ")
 
+def getUserPage():
+    pass
+
+def getSoundPage():
+    pass
+
 def main():
+    captureVidMeta = True
+    captureMusicMeta = True
+    captureUserMeta = True
+
     #define and get CLI args first
     args = setUpArgs()
     urls = []
@@ -223,18 +239,12 @@ def main():
         page = BeautifulSoup(chrome.page_source, "html.parser")
 
         #video ID metadata
-        #player_div = page.find("div", id = "Video")
-        #videoID = player_div.get("ga_label")
-        #metadata["videoID"] = videoID
-
         videoID = pageURL.split("/")[-1]
         metadata["videoID"] = videoID
 
+        #video URL metadata
         try:
-            #video URL metadata
-            #videoURL = player_div.video.get("src")
-            videoURL = page.find("video").get("src")
-            #print(videoURL)
+            videoURL = "https://tiktok.com" + page.find("video", class_ = "_video_card_").get("src")
             #metadata["videoURL"] = videoURL
         except AttributeError:
             #Lazy way of checking if user provided bad URL or video was deleted
@@ -244,14 +254,10 @@ def main():
             continue
 
         #user name metadata
-        #metadata_div = page.find("div", id = "metadata")
-        #userName = metadata_div.contents[0].h1.text
         userName = page.find("p", class_ = "_video_card_big_user_info_nickname").text
-        #print(userName)
         metadata["userName"] = userName
 
         #user ID metadata
-        #userID = metadata_div.contents[1].p.text
         userID = page.find("p", class_ = "_video_card_big_user_info_handle").text[1:]
         #print(userID)
         metadata["userID"] = userID
@@ -260,21 +266,31 @@ def main():
         userURL = page.find("a", class_ = "_video_card_big_user_info_").get("href")
         metadata["userURL"] = userURL
 
+        #user number
+        userNum = userURL.split("/")[-1]
+        #print(userNum)
+        #metadata["userNum"] = userNum
+
         #sound metadata
-        #ps = metadata_div.find_all("p")
-        #sound = ps[1].text
         sound = page.find("div", class_ = "_video_card_big_meta_info_music").a.text
         metadata["sound"] = sound
 
+        #sound share URL metadata
+        soundURL = page.find("div", class_ = "_video_card_big_meta_info_music").a.get("href")
+        #metadata["soundURL"] = soundURL
+
+        #sound number metadata
+        soundNum = soundURL.split("/")[-1]
+        #print(soundNum)
+        #metadata["soundNum"] = soundNum
+
         #caption metadata
-        #caption = page.find("p", id = "caption").text
         caption = page.find("h1", class_ = "_video_card_big_meta_info_title").span.text
-        #print(caption)
         metadata["caption"] = caption
 
         #counts metadata_div
         counts = page.find("div", class_ = "_video_card_big_meta_info_count").text
-        #print(counts)
+        #metadata["counts"] = counts
 
         #timestamp metadata
         timestamp = readable = datetime.datetime.fromtimestamp(time.time()).isoformat()
