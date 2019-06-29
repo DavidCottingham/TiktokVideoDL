@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 from bs4 import BeautifulSoup
 from contextlib import closing
 from enum import Enum
@@ -12,13 +12,8 @@ import datetime
 import os
 import csv
 
-#New URL type: https://www.tiktok.com/share/video/6642696300275961093
-    #Can convert all to these to get new info? (likes, comments, music URL, use URL)
-
-class LoggingLevel(Enum):
-    noLog = 0
-    moderate = 1
-    verbose = 2
+#false user-agent to provide to download the video
+USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
 
 #Define CLI arguments using argparse
 def setUpArgs():
@@ -60,10 +55,23 @@ def makeDir(dirName):
         return None
 
 #Download the video from the page to the directory
-def downloadVideo(url, userID, videoID, dirName):
+def downloadVideo(url, userID, videoID, dirName, prevCookies):
     #Make video filename using user ID and video ID
     fname = userID + " - " + videoID + ".mp4"
     filePath = os.path.join(dirName, fname)
+    #cookie = prevCookies[0]
+    #print(cookie)
+    rs = requests.Session()
+    for cookie in prevCookies:
+        req_args = {"name": cookie["name"], "value": cookie["value"]}
+        opt_args = {"domain": cookie["domain"],
+            "expires": cookie["expiry"],
+            "rest": {"HttpOnly": cookie["httpOnly"]},
+            "path": cookie["path"],
+            "secure": cookie["secure"],
+        }
+        remadeCookie = requests.cookies.create_cookie(**req_args, **opt_args)
+        rs.cookies.set_cookie(remadeCookie)
 
     #Check if a video with the same filename exists. Since we are using the
         #video ID in the filename, we can assume it will be the same video
@@ -75,8 +83,10 @@ def downloadVideo(url, userID, videoID, dirName):
 
     #Try to download video file
     try:
+        rs.headers.update({"User-Agent": USERAGENT})
+        #print(rs.cookies)
         # with closing to ensure stream connection always closed
-        with closing(requests.get(url, stream=True)) as r:
+        with closing(rs.get(url, stream=True)) as r:
             if r.status_code == requests.codes.ok:
                 # "wb" = open for write and as binary file
                 with open(filePath, "wb") as mediaFile:
@@ -139,8 +149,6 @@ def writeMetadata(filePath, headers, metadata):
     except FileNotFoundError:
         print(filePath, "file not found!")
         return
-    except Exception as e:
-        raise e
 
 #Print out metadata file in format "Header: Data"
 def debugMetadataCheck(filePath):
@@ -162,6 +170,7 @@ def main():
     captureVidMeta = True
     captureMusicMeta = True
     captureUserMeta = True
+    baseURL = "https://tiktok.com"
 
     #define and get CLI args first
     args = setUpArgs()
@@ -196,9 +205,13 @@ def main():
 
     #Set up Chrome options to run headless then start Chrome webdriver with options
     options = webdriver.ChromeOptions()
-    options.add_argument('headless')
+    options.headless = True
+    #options.add_argument("--disable-features=PreloadMediaEngagementData,AutoplayIgnoreWebAudio,MediaEngagementBypassAutoplayPolicies")
     #options.add_argument('window-size=1920x1080')
+    #mobile_emulation = { "deviceName": "Nexus 5" }
+    #options.add_experimental_option("mobileEmulation", mobile_emulation)
     chrome = webdriver.Chrome(chrome_options=options)
+    #chrome.set_page_load_timeout(6)
 
     #start scraping each provided URL
     for url in urls:
@@ -206,45 +219,24 @@ def main():
         print("Scraping video from", url)
         try:
             chrome.get(url)
-            #Waiting for javascript to load video
-                #If don't wait, video URL will be empty
-            time.sleep(1)
 
+            currentCookies = chrome.get_cookies()
+            #print(currentCookies)
             #page URL metadata
             pageURL = chrome.current_url.split("?")[0]
             #print(pageURL)
-            if "/share/video/" in pageURL:
-                #print("Share type")
-                pass
-            else:
-                #make share type
-                print("not share type")
-                tempID = pageURL.split("/")[-1].split(".")[0]
-                metadata["videoID"] = tempID
-                pageURL = "https://www.tiktok.com/share/video/" + tempID
-                chrome.get(pageURL)
-                #Waiting for javascript to load video
-                    #If don't wait, video URL will be empty
-                time.sleep(1)
             #metadata["pageURL"] = pageURL
         except WebDriverException as e:
             print("Chrome error: WebDriverException")
-            #raise e
-            return
-        except Exception as e:
             raise e
             return
 
         #Pass the page source to BeautifulSoup for easier parsing
         page = BeautifulSoup(chrome.page_source, "html.parser")
 
-        #video ID metadata
-        videoID = pageURL.split("/")[-1]
-        metadata["videoID"] = videoID
-
         #video URL metadata
         try:
-            videoURL = "https://tiktok.com" + page.find("video", class_ = "_video_card_").get("src")
+            videoURL = baseURL + page.find("video", class_ = "_video_card_").get("src")
             #metadata["videoURL"] = videoURL
         except AttributeError:
             #Lazy way of checking if user provided bad URL or video was deleted
@@ -252,6 +244,10 @@ def main():
             print("Video not found. Check your URL or video was removed")
             #continue to next provided URL if video not found
             continue
+
+        #video ID metadata
+        videoID = pageURL.split("/")[-1]
+        metadata["videoID"] = videoID
 
         #user name metadata
         userName = page.find("p", class_ = "_video_card_big_user_info_nickname").text
@@ -263,11 +259,12 @@ def main():
         metadata["userID"] = userID
 
         #user profile URL metadata
-        userURL = page.find("a", class_ = "_video_card_big_user_info_").get("href")
+        userURL = baseURL + page.find("a", class_ = "_video_card_big_user_info_").get("href").split("?")[0]
+        #print(userURL)
         metadata["userURL"] = userURL
 
-        #user number
-        userNum = userURL.split("/")[-1]
+        #user number NO LONGER IN URL
+        #userNum = userURL.split("/")[-1]
         #print(userNum)
         #metadata["userNum"] = userNum
 
@@ -285,7 +282,11 @@ def main():
         #metadata["soundNum"] = soundNum
 
         #caption metadata
-        caption = page.find("h1", class_ = "_video_card_big_meta_info_title").span.text
+        if (page.find("h1", class_ = "_video_card_big_meta_info_title")):
+            caption = page.find("h1", class_ = "_video_card_big_meta_info_title").span.text
+        else:
+            #print("no caption")
+            caption = ""
         metadata["caption"] = caption
 
         #counts metadata_div
@@ -297,7 +298,7 @@ def main():
         metadata["timeAcquired"] = timestamp
 
         #get video from URL scraped. send userID, videoID and DL directory
-        if downloadVideo(videoURL, userID, videoID, directory):
+        if downloadVideo(videoURL, userID, videoID, directory, currentCookies):
             #only if video downloaded successfully write metadata to file
             writeMetadata(os.path.join(directory, CSV_FILENAME), CSV_HEADERS, metadata)
             #debugMetadataCheck(os.path.join(directory, CSV_FILENAME))
