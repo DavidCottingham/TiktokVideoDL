@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException, TimeoutException
+from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from contextlib import closing
-from enum import Enum
 import requests
 import argparse
 import time
@@ -13,7 +12,7 @@ import os
 import csv
 
 #false user-agent to provide to download the video
-USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+USERAGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML like Gecko) Chrome/44.0.2403.155 Safari/537.36"
 
 #Define CLI arguments using argparse
 def setUpArgs():
@@ -63,9 +62,10 @@ def downloadVideo(url, userID, videoID, dirName, prevCookies):
     #print(cookie)
     rs = requests.Session()
     for cookie in prevCookies:
+        #print(cookie)
         req_args = {"name": cookie["name"], "value": cookie["value"]}
         opt_args = {"domain": cookie["domain"],
-            "expires": cookie["expiry"],
+            #"expires": cookie["expiry"],
             "rest": {"HttpOnly": cookie["httpOnly"]},
             "path": cookie["path"],
             "secure": cookie["secure"],
@@ -89,6 +89,8 @@ def downloadVideo(url, userID, videoID, dirName, prevCookies):
         with closing(rs.get(url, stream=True)) as r:
             if r.status_code == requests.codes.ok:
                 # "wb" = open for write and as binary file
+                #print("Sent:", r.request.headers)
+                #print("Response:", r.headers)
                 with open(filePath, "wb") as mediaFile:
                     for chunk in r:
                         mediaFile.write(chunk)
