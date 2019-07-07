@@ -13,17 +13,35 @@ import csv
 
 #false user-agent to provide to download the video
 USERAGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML like Gecko) Chrome/44.0.2403.155 Safari/537.36"
+DEFAULTSFILENAME = "defaults"
+
+#empty class to use as a blank argparse namespace
+class NM:
+    pass
 
 #Define CLI arguments using argparse
 def setUpArgs():
-    parser = argparse.ArgumentParser()
+    nm = NM()
+    defaultsFilepath = os.path.join(os.path.abspath(os.path.dirname(__file__)), DEFAULTSFILENAME)
+    defaults = "@" + defaultsFilepath
+    parser = argparse.ArgumentParser(fromfile_prefix_chars="@",
+                description="If providing a 'defaults' file, arguments must be one per line")
     parser.add_argument("-d", "--directory",
                         help="(Parent) Directory to download videos to")
     parser.add_argument("-u", "--url",
                         help="Single URL to scrape video from")
     parser.add_argument("-f", "--file", nargs="?", const="list.txt", default=None,
                         help="Specify a .txt file with a list of URLs to scrape")
-    args = parser.parse_args()
+    parser.add_argument("-vm", "--videometadata", action="store_true",
+                        help="Flag: Save the video metadata to a CSV file")
+    parser.add_argument("-um", "--usermetadata", action="store_true",
+                        help="Flag: Save the user / creator metadata to a CSV file")
+    parser.add_argument("-sm", "--soundmetadata", action="store_true",
+                        help="Flag: Save the sound / music metadata to a CSV file")
+    #check if the defaults file exists
+    if os.path.isfile(defaultsFilepath):
+        args = parser.parse_args([defaults], namespace=nm)
+    args = parser.parse_args(namespace=nm)
     return args
 
 #Create default download directory at ~/Videos/TikTok if does not exists
@@ -170,8 +188,8 @@ def getSoundPage():
 
 def main():
     captureVidMeta = True
-    captureMusicMeta = True
-    captureUserMeta = True
+    captureSoundMeta = False
+    captureUserMeta = False
     baseURL = "https://tiktok.com"
 
     #define and get CLI args first
@@ -190,6 +208,10 @@ def main():
         directory = makeDir("")
     if not directory:
         return
+
+    captureVidMeta = True if args.videometadata else False
+    captureUserMeta = True if args.usermetadata else False
+    captureSoundMeta = True if args.soundmetadata else False
 
     #Check if user has provided list of URLs or single URL or no URL
     if args.file:       #list of urls provided via CLI args
@@ -302,7 +324,8 @@ def main():
         #get video from URL scraped. send userID, videoID and DL directory
         if downloadVideo(videoURL, userID, videoID, directory, currentCookies):
             #only if video downloaded successfully write metadata to file
-            writeMetadata(os.path.join(directory, CSV_FILENAME), CSV_HEADERS, metadata)
+            if captureVidMeta:
+                writeMetadata(os.path.join(directory, CSV_FILENAME), CSV_HEADERS, metadata)
             #debugMetadataCheck(os.path.join(directory, CSV_FILENAME))
 
     #Close Chrome properly
