@@ -274,11 +274,11 @@ def main():
         metadata["videoID"] = videoID
 
         #user name metadata
-        userName = page.find("p", class_ = "_video_card_big_user_info_nickname").text
+        userName = page.find("h2", class_ = "_video_card_big_user_info_nickname").text
         metadata["userName"] = userName
 
         #user ID metadata
-        userID = page.find("p", class_ = "_video_card_big_user_info_handle").text[1:]
+        userID = page.find("h2", class_ = "_video_card_big_user_info_handle").text[1:]
         #print(userID)
         metadata["userID"] = userID
 
