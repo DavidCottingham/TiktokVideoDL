@@ -10,10 +10,14 @@ import time
 import datetime
 import os
 import csv
+import re
 
 #false user-agent to provide to download the video
 USERAGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML like Gecko) Chrome/44.0.2403.155 Safari/537.36"
 DEFAULTSFILENAME = "defaults"
+VIDMETAFILENAME = "__videometadata"
+USERMETAFILENAME = "__usermetadata"
+SOUNDMETAFILENAME = "__soundmetadata"
 
 #empty class to use as a blank argparse namespace
 class NM:
@@ -187,7 +191,7 @@ def getSoundPage():
     pass
 
 def main():
-    captureVidMeta = True
+    captureVidMeta = False
     captureSoundMeta = False
     captureUserMeta = False
     baseURL = "https://tiktok.com"
@@ -196,9 +200,11 @@ def main():
     args = setUpArgs()
     urls = []
     #Metadata headers
-    CSV_HEADERS = ["videoID", "videoURL", "pageURL", "userName", "userID",
-                    "userURL", "sound", "caption", "timeAcquired"]
-    CSV_FILENAME = "__metadata.csv"
+    VID_CSV_HEADERS = ["videoID", "userID", "userName", "sound", "caption",
+                        "numLikes", "numComments", "timeAcquired", "url"]
+    USER_CSV_HEADERS = ["userID", "userName", "numFollowing",
+                        "numFans", "numHearts", "description", "url"]
+    SOUND_CSV_HEADERS = ["title", "author", "numVideos", "url"]
 
     #check if user has provided download directory.
         #Create the default directory if needed
@@ -213,7 +219,7 @@ def main():
     captureUserMeta = True if args.usermetadata else False
     captureSoundMeta = True if args.soundmetadata else False
 
-    #Check if user has provided list of URLs or single URL or no URL
+    #Check if user has provided list of URLs, single URL, or no URL
     if args.file:       #list of urls provided via CLI args
         urls = getURLsFromFile(args.file)
     elif args.url:      #single url provided via CLI args
@@ -230,26 +236,23 @@ def main():
     #Set up Chrome options to run headless then start Chrome webdriver with options
     options = webdriver.ChromeOptions()
     options.headless = True
-    #options.add_argument("--disable-features=PreloadMediaEngagementData,AutoplayIgnoreWebAudio,MediaEngagementBypassAutoplayPolicies")
-    #options.add_argument('window-size=1920x1080')
-    #mobile_emulation = { "deviceName": "Nexus 5" }
-    #options.add_experimental_option("mobileEmulation", mobile_emulation)
     chrome = webdriver.Chrome(chrome_options=options)
-    #chrome.set_page_load_timeout(6)
 
     #start scraping each provided URL
     for url in urls:
-        metadata = {}
+        vidMetadata = {}
+        userMetadata = {}
+        soundMetadata = {}
         print("Scraping video from", url)
         try:
             chrome.get(url)
 
             currentCookies = chrome.get_cookies()
             #print(currentCookies)
-            #page URL metadata
+            #video URL metadata
             pageURL = chrome.current_url.split("?")[0]
+            vidMetadata["url"] = pageURL
             #print(pageURL)
-            #metadata["pageURL"] = pageURL
         except WebDriverException as e:
             print("Chrome error: WebDriverException")
             raise e
@@ -271,62 +274,105 @@ def main():
 
         #video ID metadata
         videoID = pageURL.split("/")[-1]
-        metadata["videoID"] = videoID
+        vidMetadata["videoID"] = videoID
 
         #user name metadata
         userName = page.find("h2", class_ = "_video_card_big_user_info_nickname").text
-        metadata["userName"] = userName
+        vidMetadata["userName"] = userName
+        userMetadata["userName"] = userName
 
         #user ID metadata
         userID = page.find("h2", class_ = "_video_card_big_user_info_handle").text[1:]
         #print(userID)
-        metadata["userID"] = userID
+        vidMetadata["userID"] = userID
+        userMetadata["userID"] = userID
 
         #user profile URL metadata
         userURL = baseURL + page.find("a", class_ = "_video_card_big_user_info_").get("href").split("?")[0]
         #print(userURL)
-        metadata["userURL"] = userURL
+        userMetadata["url"] = userURL
 
-        #user number NO LONGER IN URL
-        #userNum = userURL.split("/")[-1]
-        #print(userNum)
-        #metadata["userNum"] = userNum
-
-        #sound metadata
+        #sound title metadata
         sound = page.find("div", class_ = "_video_card_big_meta_info_music").a.text
-        metadata["sound"] = sound
+        vidMetadata["sound"] = sound
 
-        #sound share URL metadata
-        soundURL = page.find("div", class_ = "_video_card_big_meta_info_music").a.get("href")
-        #metadata["soundURL"] = soundURL
-
-        #sound number metadata
-        soundNum = soundURL.split("/")[-1]
-        #print(soundNum)
-        #metadata["soundNum"] = soundNum
+        #sound URL metadata
+        soundURL = baseURL + page.find("div", class_ = "_video_card_big_meta_info_music").a.get("href")
+        soundMetadata["url"] = soundURL
 
         #caption metadata
-        if (page.find("h1", class_ = "_video_card_big_meta_info_title")):
-            caption = page.find("h1", class_ = "_video_card_big_meta_info_title").span.text
+        # if no caption is found, save empty string
+        if(page.find("h2", class_ = "_video_card_big_meta_info_title")):
+            caption = page.find("h2", class_ = "_video_card_big_meta_info_title").strong.text
         else:
-            #print("no caption")
+            print("no caption")
             caption = ""
-        metadata["caption"] = caption
+        vidMetadata["caption"] = caption
 
-        #counts metadata_div
+        #video counts
         counts = page.find("div", class_ = "_video_card_big_meta_info_count").text
+        countsRE = re.compile(r"^(\d+\.?\d?[k|m]?)\s\D+(\d+\.?\d?[k|m]?)")
+        countsMatch = countsRE.match(counts)
+        numVidLikes = ""
+        numVidComments = ""
+        if countsMatch:
+            numVidLikes = countsMatch.group(1)
+            numVidComments = countsMatch.group(2)
+        vidMetadata["numLikes"] = numVidLikes
+        vidMetadata["numComments"] = numVidComments
+        #print(numVidLikes)
+        #print(numVidComments)
         #metadata["counts"] = counts
 
         #timestamp metadata
         timestamp = readable = datetime.datetime.fromtimestamp(time.time()).isoformat()
-        metadata["timeAcquired"] = timestamp
+        vidMetadata["timeAcquired"] = timestamp
+
+        if captureUserMeta:
+            chrome.get(userURL)
+            page = BeautifulSoup(chrome.page_source, "html.parser")
+
+            #USER_CSV_HEADERS = ["userID", "userName", "url", "numFollowing", "numFans", "numHearts", "description"]
+            #following metadata - assume order stays same
+            userCounts = page.find("div", class_ = "_user_header_count")
+            z = userCounts.find_all("span", class_ = "_user_header_number")
+            userFollowing = z[0].text
+            userFans = z[1].text
+            userHearts = z[2].text
+            userMetadata["numFollowing"] = userFollowing
+            userMetadata["numFans"] = userFans
+            userMetadata["numHearts"] = userHearts
+            #print(userFollowing, userFans, userHearts)
+
+            if(page.find("h2", class_ = "_user_header_desc").text):
+                userDesc = page.find("h2", class_ = "_user_header_desc").text
+                #print(userDesc)
+                userMetadata["description"] = userDesc
+
+        if captureSoundMeta:
+            #SOUND_CSV_HEADERS = ["title", "author", "url", "numVideos"]
+            chrome.get(soundURL)
+            page = BeautifulSoup(chrome.page_source, "html.parser")
+
+            soundTitle = page.find("h1", class_ = "_music_header_title").text
+            #print(soundTitle)
+            soundAuthor = page.find("h1", class_ = "_music_header_author").span.text
+            #print(soundAuthor)
+            soundNumVid = page.find("span", class_ = "_music_header_number").text
+            #print(soundNumVid)
+            soundMetadata["title"] = soundTitle
+            soundMetadata["author"] = soundAuthor
+            soundMetadata["numVideos"] = soundNumVid
 
         #get video from URL scraped. send userID, videoID and DL directory
         if downloadVideo(videoURL, userID, videoID, directory, currentCookies):
-            #only if video downloaded successfully write metadata to file
+            #only if video successfully downloaded, write metadata to file
             if captureVidMeta:
-                writeMetadata(os.path.join(directory, CSV_FILENAME), CSV_HEADERS, metadata)
-            #debugMetadataCheck(os.path.join(directory, CSV_FILENAME))
+                writeMetadata(os.path.join(directory, VIDMETAFILENAME), VID_CSV_HEADERS, vidMetadata)
+            if captureUserMeta:
+                writeMetadata(os.path.join(directory, USERMETAFILENAME), USER_CSV_HEADERS, userMetadata)
+            if captureSoundMeta:
+                writeMetadata(os.path.join(directory, SOUNDMETAFILENAME), SOUND_CSV_HEADERS, soundMetadata)
 
     #Close Chrome properly
     chrome.quit()
