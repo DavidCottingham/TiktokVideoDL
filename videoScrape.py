@@ -15,9 +15,9 @@ import re
 #false user-agent to provide to download the video
 USERAGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML like Gecko) Chrome/44.0.2403.155 Safari/537.36"
 DEFAULTSFILENAME = "defaults"
-VIDMETAFILENAME = "__videometadata"
-USERMETAFILENAME = "__usermetadata"
-SOUNDMETAFILENAME = "__soundmetadata"
+VIDMETAFILENAME = "__videometadata.csv"
+USERMETAFILENAME = "__usermetadata.csv"
+SOUNDMETAFILENAME = "__soundmetadata.csv"
 
 #empty class to use as a blank argparse namespace
 class NM:
