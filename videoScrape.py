@@ -80,6 +80,7 @@ def downloadVideo(url, userID, videoID, dirName, prevCookies):
     #Make video filename using user ID and video ID
     fname = userID + " - " + videoID + ".mp4"
     filePath = os.path.join(dirName, fname)
+    #print(filePath)
     #cookie = prevCookies[0]
     #print(cookie)
     rs = requests.Session()
@@ -134,7 +135,10 @@ def getURLsFromFile(filePath):
     try:
         with open(filePath, "r") as listFile:
             for t in listFile:
-                urls.append(t.strip())
+                if not t:
+                    continue
+                else:
+                    urls.append(t.strip())
             return urls
     except FileNotFoundError:
         print(filePath, "file not found!")
@@ -221,13 +225,13 @@ def main():
 
     #Check if user has provided list of URLs, single URL, or no URL
     if args.file:       #list of urls provided via CLI args
-        urls = getURLsFromFile(args.file)
+        urls = getURLsFromFile(args.file.strip())
     elif args.url:      #single url provided via CLI args
-        urls.append(args.url)
+        urls.append(args.url.strip())
     else:               #if nothing provided via CLI args, ask for user input
         inputURL = input("TikTok page: ")
         if inputURL:
-            urls.append(inputURL)
+            urls.append(inputURL.strip())
         else:
             #If user didn't provide URL, abort
             print ("No URL entered.")
@@ -261,16 +265,13 @@ def main():
         #Pass the page source to BeautifulSoup for easier parsing
         page = BeautifulSoup(chrome.page_source, "html.parser")
 
-        #video URL metadata
-        try:
-            videoURL = baseURL + page.find("video", class_ = "_video_card_").get("src")
-            #metadata["videoURL"] = videoURL
-        except AttributeError:
-            #Lazy way of checking if user provided bad URL or video was deleted
-                #page will not have video to load (no src in video div) if no video
-            print("Video not found. Check your URL or video was removed")
-            #continue to next provided URL if video not found
+        #check for missing video
+        if page.find("div", class_ = "_error_page_"):
+            print("Video removed (or check your URL)")
             continue
+
+        #video URL to download
+        videoURL = baseURL + page.find("video", class_ = "_video_card_").get("src")
 
         #video ID metadata
         videoID = pageURL.split("/")[-1]
@@ -305,7 +306,7 @@ def main():
         if(page.find("h2", class_ = "_video_card_big_meta_info_title")):
             caption = page.find("h2", class_ = "_video_card_big_meta_info_title").strong.text
         else:
-            print("no caption")
+            #print("no caption")
             caption = ""
         vidMetadata["caption"] = caption
 
@@ -322,7 +323,6 @@ def main():
         vidMetadata["numComments"] = numVidComments
         #print(numVidLikes)
         #print(numVidComments)
-        #metadata["counts"] = counts
 
         #timestamp metadata
         timestamp = readable = datetime.datetime.fromtimestamp(time.time()).isoformat()
@@ -332,37 +332,45 @@ def main():
             chrome.get(userURL)
             page = BeautifulSoup(chrome.page_source, "html.parser")
 
-            #USER_CSV_HEADERS = ["userID", "userName", "url", "numFollowing", "numFans", "numHearts", "description"]
-            #following metadata - assume order stays same
-            userCounts = page.find("div", class_ = "_user_header_count")
-            z = userCounts.find_all("span", class_ = "_user_header_number")
-            userFollowing = z[0].text
-            userFans = z[1].text
-            userHearts = z[2].text
-            userMetadata["numFollowing"] = userFollowing
-            userMetadata["numFans"] = userFans
-            userMetadata["numHearts"] = userHearts
-            #print(userFollowing, userFans, userHearts)
+            if page.find("div", class_ = "_error_page_"):
+                print("User not found")
+            else:
+                #following metadata - assume order stays same
+                userCounts = page.find("div", class_ = "_user_header_count")
+                countsArray = userCounts.find_all("span", class_ = "_user_header_number")
+                userFollowing = countsArray[0].text
+                userFans = countsArray[1].text
+                userHearts = countsArray[2].text
+                userMetadata["numFollowing"] = userFollowing
+                userMetadata["numFans"] = userFans
+                userMetadata["numHearts"] = userHearts
+                #print(userFollowing, userFans, userHearts)
 
-            if(page.find("h2", class_ = "_user_header_desc").text):
-                userDesc = page.find("h2", class_ = "_user_header_desc").text
-                #print(userDesc)
-                userMetadata["description"] = userDesc
+                if(page.find("h2", class_ = "_user_header_desc").text):
+                    userDesc = page.find("h2", class_ = "_user_header_desc").text
+                    #print(userDesc)
+                    userMetadata["description"] = userDesc
 
         if captureSoundMeta:
-            #SOUND_CSV_HEADERS = ["title", "author", "url", "numVideos"]
             chrome.get(soundURL)
             page = BeautifulSoup(chrome.page_source, "html.parser")
 
-            soundTitle = page.find("h1", class_ = "_music_header_title").text
-            #print(soundTitle)
-            soundAuthor = page.find("h1", class_ = "_music_header_author").span.text
-            #print(soundAuthor)
-            soundNumVid = page.find("span", class_ = "_music_header_number").text
-            #print(soundNumVid)
-            soundMetadata["title"] = soundTitle
-            soundMetadata["author"] = soundAuthor
-            soundMetadata["numVideos"] = soundNumVid
+            if page.find("div", class_ = "_error_page_"):
+                print("Sound not found")
+            else:
+                soundTitle = page.find("h1", class_ = "_music_header_title").text
+                #print(soundTitle)
+                authorSection = page.find("h1", class_ = "_music_header_author")
+                if authorSection.span:
+                    soundAuthor = authorSection.span.text
+                elif authorSection.a:
+                    soundAuthor = authorSection.a.text
+                #print(soundAuthor)
+                soundNumVid = page.find("span", class_ = "_music_header_number").text
+                #print(soundNumVid)
+                soundMetadata["title"] = soundTitle
+                soundMetadata["author"] = soundAuthor
+                soundMetadata["numVideos"] = soundNumVid
 
         #get video from URL scraped. send userID, videoID and DL directory
         if downloadVideo(videoURL, userID, videoID, directory, currentCookies):
